@@ -20,6 +20,7 @@ const TABS = [
   { id: 'history' as Tab, label: 'history' },
 ]
 const COLS = ['Asset', 'Chain', 'Type', 'Maturity', 'Size', 'Notional', 'Strike', 'Yield', 'Income', 'Current Price', 'Target', 'Outcome']
+const TOTAL_COLS = ['Positions', 'Locked SOL', 'Locked USDC', 'Yield in SOL', 'Yield in USDC']
 
 const dateShort = (ts: number) => new Date(ts * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
 /** Sell positions lock the asset (SOL or a listed token); buy positions lock USDC. */
@@ -173,7 +174,7 @@ export default function Dashboard() {
             <span>Log in, or view any address read-only:</span>
             <form onSubmit={(e) => { e.preventDefault(); if (addrInput.trim()) navigate(`/dashboard?as=${addrInput.trim()}`) }}>
               <input value={addrInput} onChange={(e) => setAddrInput(e.target.value)} placeholder="Solana address" spellCheck={false} />
-              <button type="submit" className="btn" style={{ height: 36 }}>View</button>
+              <button type="submit" className="btn">View</button>
             </form>
           </div>
         )}
@@ -182,20 +183,23 @@ export default function Dashboard() {
 
         {tab === 'total' ? (
           <div className="tbl-wrap">
-            <div className="tbl" style={{ gridTemplateColumns: 'repeat(5, minmax(max-content, 1fr))' }}>
-              {['Positions', 'Locked SOL', 'Locked USDC', 'Yield in SOL', 'Yield in USDC'].map((c, i) => <div key={c} className={`tbl-h ${i === 0 ? '' : 'end'}`}>{c}</div>)}
+            {/* On a phone each row is a card (.tbl-cards) and data-label names each value, as the hidden header would. */}
+            <div className="tbl tbl-cards" style={{ gridTemplateColumns: `repeat(${TOTAL_COLS.length}, minmax(max-content, 1fr))` }}>
+              {TOTAL_COLS.map((c, i) => <div key={c} className={`tbl-h ${i === 0 ? '' : 'end'}`}>{c}</div>)}
               <ul className="tbl-row">
-                <li className="tbl-c">{open.length} open · {settled.length} settled</li>
-                <li className="tbl-c end">{fmtNum(totals.lockedSol, 4)}</li>
-                <li className="tbl-c end">{fmtNum(totals.lockedUsdc)}</li>
-                <li className="tbl-c end"><span className="apr">{fmtNum(totals.yieldSol, 6)}</span></li>
-                <li className="tbl-c end"><span className="apr">{fmtNum(totals.yieldUsdc)}</span></li>
+                <li className="tbl-c full" data-label="Positions">{open.length} open · {settled.length} settled</li>
+                <li className="tbl-c end" data-label="Locked SOL">{fmtNum(totals.lockedSol, 4)}</li>
+                <li className="tbl-c end" data-label="Locked USDC">{fmtNum(totals.lockedUsdc)}</li>
+                <li className="tbl-c end" data-label="Yield in SOL"><span className="apr">{fmtNum(totals.yieldSol, 6)}</span></li>
+                <li className="tbl-c end" data-label="Yield in USDC"><span className="apr">{fmtNum(totals.yieldUsdc)}</span></li>
               </ul>
             </div>
           </div>
         ) : (
           <div className="tbl-wrap">
-            <div className="tbl tbl-dense" style={{ gridTemplateColumns: `repeat(${COLS.length}, minmax(max-content, 1fr))` }}>
+            {/* A phone card leaves out the chain (always Solana) and the target (the strike again), and
+                puts the outcome beside the asset, so Settle is in reach without scrolling sideways. */}
+            <div className="tbl tbl-dense tbl-cards" style={{ gridTemplateColumns: `repeat(${COLS.length}, minmax(max-content, 1fr))` }}>
               {COLS.map((c, i) => <div key={c} className={`tbl-h ${i === 0 ? 'sticky' : 'end'}`}>{c}</div>)}
               {shown.map((p) => {
                 const price = prices[priceKey(p)]
@@ -208,17 +212,17 @@ export default function Dashboard() {
                     <li className="tbl-c sticky">
                       <div className="asset"><img src={iconFor(p.symbol)} alt="" /><div className="asset-id"><b>{p.symbol}</b><small><a href={explorerAddr(p.address.toBase58())} target="_blank" rel="noopener noreferrer">{shortAddr(p.address.toBase58())}</a></small></div></div>
                     </li>
-                    <li className="tbl-c end"><div className="chain"><img src="/icons/solana.svg" alt="" /><span>Solana</span></div></li>
-                    <li className="tbl-c end">{p.product === 'sell_sol' ? 'Sell high' : 'Buy low'}</li>
-                    <li className="tbl-c end">{dateShort(p.expiryTs)}</li>
-                    <li className="tbl-c end">{coll}</li>
-                    <li className="tbl-c end">${fmtNum(notionalUsd(p))}</li>
-                    <li className="tbl-c end">{fmtPrice(Number(p.fixedPrice) / 1e6)}</li>
-                    <li className="tbl-c end"><span className="apr">{yieldPct(p).toFixed(3)}%</span></li>
-                    <li className="tbl-c end"><b>{income}</b></li>
-                    <li className="tbl-c end">{price ? fmtPrice(Number(price.price) / 1e6) : live ? fmtPrice(live) : '—'}</li>
-                    <li className="tbl-c end">{fmtPrice(Number(p.fixedPrice) / 1e6)}</li>
-                    <li className="tbl-c end">
+                    <li className="tbl-c end wide"><div className="chain"><img src="/icons/solana.svg" alt="" /><span>Solana</span></div></li>
+                    <li className="tbl-c end" data-label="Type">{p.product === 'sell_sol' ? 'Sell high' : 'Buy low'}</li>
+                    <li className="tbl-c end" data-label="Maturity">{dateShort(p.expiryTs)}</li>
+                    <li className="tbl-c end" data-label="Size">{coll}</li>
+                    <li className="tbl-c end" data-label="Notional">${fmtNum(notionalUsd(p))}</li>
+                    <li className="tbl-c end" data-label="Strike">{fmtPrice(Number(p.fixedPrice) / 1e6)}</li>
+                    <li className="tbl-c end" data-label="Yield"><span className="apr">{yieldPct(p).toFixed(3)}%</span></li>
+                    <li className="tbl-c end" data-label="Income"><b>{income}</b></li>
+                    <li className="tbl-c end" data-label="Current Price">{price ? fmtPrice(Number(price.price) / 1e6) : live ? fmtPrice(live) : '—'}</li>
+                    <li className="tbl-c end wide">{fmtPrice(Number(p.fixedPrice) / 1e6)}</li>
+                    <li className="tbl-c end aside">
                       <span className={`outcome outcome-${o.tone}`}>{o.label}</span>
                       {o.settleable && !p.settled && (
                         <button type="button" className="settle-btn" disabled={settling === p.address.toBase58()} onClick={() => settle(p)}>

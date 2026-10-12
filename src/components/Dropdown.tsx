@@ -20,16 +20,17 @@ export default function Dropdown({ options, value, onChange, label, prefix = '' 
 
   useEffect(() => {
     if (!open) return
-    const onDoc = (e: MouseEvent) => {
+    // Pointer events, not mouse ones: iOS sends no mousedown for a tap on plain page content.
+    const onDoc = (e: PointerEvent) => {
       if (!ref.current?.contains(e.target as Node)) setOpen(false)
     }
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false)
     }
-    document.addEventListener('mousedown', onDoc)
+    document.addEventListener('pointerdown', onDoc)
     document.addEventListener('keydown', onKey)
     return () => {
-      document.removeEventListener('mousedown', onDoc)
+      document.removeEventListener('pointerdown', onDoc)
       document.removeEventListener('keydown', onKey)
     }
   }, [open])

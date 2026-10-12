@@ -54,9 +54,9 @@ export default function Earn() {
 
   useEffect(() => {
     if (!menu) return
-    const close = (e: MouseEvent) => { if (!menuRef.current?.contains(e.target as Node)) setMenu(false) }
-    document.addEventListener('mousedown', close)
-    return () => document.removeEventListener('mousedown', close)
+    const close = (e: PointerEvent) => { if (!menuRef.current?.contains(e.target as Node)) setMenu(false) }
+    document.addEventListener('pointerdown', close)
+    return () => document.removeEventListener('pointerdown', close)
   }, [menu])
 
   // Live yields for every asset the desk prices, both products, refreshed every 60s.
@@ -171,7 +171,8 @@ export default function Earn() {
         </div>
         <div className="tbl-wrap">
           {/* Column widths live in the stylesheet (.tbl-earn): fixed APR and action columns, so
-              nothing shifts between the two tabs, narrowing with the screen so the table never scrolls sideways. */}
+              nothing shifts between the two tabs, narrowing with the screen so the table never scrolls sideways.
+              A phone leaves the action column out; the row and the asset link still open the market. */}
           <div className="tbl tbl-earn">
             <div className="tbl-h sticky" role="columnheader">
               Asset

@@ -67,7 +67,7 @@ export default function Leaderboard() {
         </label>
         <Tabs items={TABS} active={tab} onChange={setTab} />
         <div className="tbl-wrap">
-          <div className="tbl" style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr' }}>
+          <div className="tbl tbl-lb">
             <div className="tbl-h">Rank</div>
             <div className="tbl-h">User</div>
             <div className="tbl-h end">Positions</div>
