@@ -7,18 +7,27 @@ export const CHAINS: Record<ChainId, { name: string; icon: string }> = {
   101: { name: 'Solana', icon: '/icons/solana.svg' },
 }
 
-/** Tokenized pre-IPO companies issued by PreStocks (prestocks.com); the desk quotes them from a synthetic chain. */
+/** PreStocks tokens (prestocks.com) with a logo on its site. */
 const PRESTOCKS = new Set(['ANTHROPIC', 'OPENAI', 'SPACEX', 'ANDURIL', 'NEURALINK', 'FIGUREAI', 'KALSHI', 'POLYMARKET'])
-export const isPreStocks = (asset: string) => PRESTOCKS.has(asset)
+/** Icons kept as PNG; every other one is `/icons/<symbol>.svg`. */
+const PNG_ICONS = new Set(['PAXG', 'SKR'])
 
+/** Artwork is optional: an asset the backend lists without a file here falls back to `letterIcon`. */
 export const iconFor = (symbol: string) =>
-  symbol === 'PAXG'
-    ? '/icons/paxg.png'
+  PNG_ICONS.has(symbol)
+    ? `/icons/${symbol.toLowerCase()}.png`
     : PRESTOCKS.has(symbol)
       ? `https://prestocks.com/logos/${symbol.toLowerCase()}.png`
       : `/icons/${symbol.toLowerCase()}.svg`
 
-/** The asset filter on the Earn table. Everything that is not a stock, an ETF or a PreStocks token counts as crypto. */
+/** A stand-in icon, the asset's initial on a disc, for an asset icon that failed to load. */
+export const letterIcon = (iconUrl: string) => {
+  const initial = (iconUrl.match(/([^/]+)\.(?:svg|png)$/)?.[1] ?? '?').charAt(0).toUpperCase()
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="16" fill="#5f665e"/><text x="16" y="21.5" text-anchor="middle" font-family="system-ui,sans-serif" font-size="16" font-weight="600" fill="#fff">${initial}</text></svg>`
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`
+}
+
+/** The asset filter on the Earn table. */
 export type Category = 'crypto' | 'stocks' | 'etf' | 'prestocks'
 export const CATEGORIES: { id: Category; label: string }[] = [
   { id: 'crypto', label: 'Crypto' },
@@ -26,13 +35,17 @@ export const CATEGORIES: { id: Category; label: string }[] = [
   { id: 'etf', label: 'ETF' },
   { id: 'prestocks', label: 'Pre-stocks' },
 ]
-const STOCKS = new Set(['TSLAon', 'NVDAon', 'HYNIXon', 'AAPLon', 'MSFTon', 'AMZNon', 'GOOGLon', 'METAon', 'NFLXon', 'COINon', 'MSTRon'])
-// XAGon tracks a silver ETF; PAXG is a gold-backed crypto token, so it stays under crypto.
 const ETFS = new Set(['SPYon', 'QQQon', 'XAGon'])
-export const categoryOf = (asset: string): Category =>
-  PRESTOCKS.has(asset) ? 'prestocks' : STOCKS.has(asset) ? 'stocks' : ETFS.has(asset) ? 'etf' : 'crypto'
+/**
+ * Where the market maker prices an asset places it: PreStocks tokens, US-listed names
+ * (Alpaca), and crypto for everything else. Two things the venue cannot tell are kept
+ * here: which US-listed names are ETFs (XAGon tracks a silver ETF), and PAXG, a
+ * gold-backed crypto token that is priced off a gold ETF.
+ */
+export const categoryOf = (asset: string, venue: string | null): Category =>
+  venue === 'prestocks' ? 'prestocks' : ETFS.has(asset) ? 'etf' : venue === 'alpaca' && asset !== 'PAXG' ? 'stocks' : 'crypto'
 
-/** Long-form label for an asset, shown under the ticker on the Earn table. */
+/** Long-form labels shown under the ticker on the Earn table. Optional: an asset without one shows its underlying. */
 const ASSET_NAMES: Record<string, string> = {
   SOL: 'Solana',
   WBTC: 'Wrapped Bitcoin',
@@ -40,6 +53,7 @@ const ASSET_NAMES: Record<string, string> = {
   JUP: 'Jupiter',
   PYTH: 'Pyth Network',
   RAY: 'Raydium',
+  SKR: 'Seeker',
   PAXG: 'Tokenized Gold',
   XAGon: 'Tokenized Silver',
   TSLAon: 'Tesla',
@@ -64,7 +78,7 @@ const ASSET_NAMES: Record<string, string> = {
   KALSHI: 'Kalshi',
   POLYMARKET: 'Polymarket',
 }
-export const assetName = (asset: string) => ASSET_NAMES[asset] ?? asset
+export const assetName = (asset: string, underlying?: string | null) => ASSET_NAMES[asset] ?? underlying ?? asset
 
 export type Market = {
   asset: string
@@ -74,97 +88,18 @@ export type Market = {
   type: OptionType
 }
 
-// No APRs here: the Earn table shows only what the market-maker desk is quoting.
-const call = (asset: string, strike: string): Market => ({
-  asset, chainId: SOLANA, collateral: asset, strike, type: 'call',
+/**
+ * The market for one asset and strategy. There is no list of assets here: the pages show
+ * whatever the backend reports (`health.assets`), and every asset it reports has both
+ * strategies. Sell High locks the asset itself, Buy Low locks USDC.
+ */
+export const marketOf = (asset: string, type: OptionType): Market => ({
+  asset, chainId: SOLANA, collateral: type === 'call' ? asset : 'USDC', strike: 'USDC', type,
 })
-const put = (asset: string, stable: string): Market => ({
-  asset, chainId: SOLANA, collateral: stable, strike: stable, type: 'put',
-})
-
-export const CALLS: Market[] = [
-  call('SOL', 'USDC'),
-  call('WBTC', 'USDC'),
-  call('WETH', 'USDC'),
-  call('TSLAon', 'USDC'),
-  call('NVDAon', 'USDC'),
-  call('HYNIXon', 'USDC'),
-  call('XAGon', 'USDC'),
-  call('QQQon', 'USDC'),
-  call('SPYon', 'USDC'),
-  call('PAXG', 'USDC'),
-  call('AAPLon', 'USDC'),
-  call('MSFTon', 'USDC'),
-  call('AMZNon', 'USDC'),
-  call('GOOGLon', 'USDC'),
-  call('METAon', 'USDC'),
-  call('NFLXon', 'USDC'),
-  call('COINon', 'USDC'),
-  call('MSTRon', 'USDC'),
-  call('ANTHROPIC', 'USDC'),
-  call('OPENAI', 'USDC'),
-  call('SPACEX', 'USDC'),
-  call('ANDURIL', 'USDC'),
-  call('NEURALINK', 'USDC'),
-  call('FIGUREAI', 'USDC'),
-  call('KALSHI', 'USDC'),
-  call('POLYMARKET', 'USDC'),
-  call('JUP', 'USDC'),
-  call('PYTH', 'USDC'),
-  call('RAY', 'USDC'),
-]
-
-export const PUTS: Market[] = [
-  put('SOL', 'USDC'),
-  put('WBTC', 'USDC'),
-  put('WETH', 'USDC'),
-  put('TSLAon', 'USDC'),
-  put('NVDAon', 'USDC'),
-  put('HYNIXon', 'USDC'),
-  put('XAGon', 'USDC'),
-  put('QQQon', 'USDC'),
-  put('SPYon', 'USDC'),
-  put('PAXG', 'USDC'),
-  put('AAPLon', 'USDC'),
-  put('MSFTon', 'USDC'),
-  put('AMZNon', 'USDC'),
-  put('GOOGLon', 'USDC'),
-  put('METAon', 'USDC'),
-  put('NFLXon', 'USDC'),
-  put('COINon', 'USDC'),
-  put('MSTRon', 'USDC'),
-  put('ANTHROPIC', 'USDC'),
-  put('OPENAI', 'USDC'),
-  put('SPACEX', 'USDC'),
-  put('ANDURIL', 'USDC'),
-  put('NEURALINK', 'USDC'),
-  put('FIGUREAI', 'USDC'),
-  put('KALSHI', 'USDC'),
-  put('POLYMARKET', 'USDC'),
-  put('JUP', 'USDC'),
-  put('RAY', 'USDC'),
-]
 
 export const marketHref = (m: Market, expiryId?: string) =>
   `/earn?asset=${m.asset}&collateral=${m.collateral}&strike=${m.strike}&type=${m.type}` +
   (expiryId ? `&expiry=${expiryId}` : '')
-
-/** Distinct assets that have a market of this type. */
-export const assetsFor = (type: OptionType) =>
-  [...new Set((type === 'call' ? CALLS : PUTS).filter((m) => m.type === type).map((m) => m.asset))]
-
-/** Every market for one asset and type, one per collateral token. */
-export const marketsFor = (asset: string, type: OptionType) =>
-  (type === 'call' ? CALLS : PUTS).filter((m) => m.asset === asset)
-
-/**
- * Best market for the requested asset and type, preferring the given collateral.
- * Falls back to the first market of that type when the asset has none.
- */
-export const findMarket = (asset: string, type: OptionType, collateral?: string): Market => {
-  const list = marketsFor(asset, type)
-  return list.find((m) => m.collateral === collateral) ?? list[0] ?? (type === 'call' ? CALLS : PUTS)[0]
-}
 
 export const CAP_SOLD = { call: 44.39, put: 52.42 }
 
@@ -206,7 +141,9 @@ export const expiryLong = (e: Expiry) =>
   `${MONTHS[e.date.getUTCMonth()]} ${ordinal(e.date.getUTCDate())}, ${e.date.getUTCFullYear()}`
 
 export const fmtPrice = (n: number) => {
-  const opts = n >= 1000 ? { maximumFractionDigits: 0 } : n >= 1 ? { maximumFractionDigits: 2 } : { maximumFractionDigits: 4 }
+  // Below one cent, four decimals would drop digits of a three-figure strike.
+  const small = n > 0 && n < 0.01 ? Math.min(8, 2 - Math.floor(Math.log10(n))) : 4
+  const opts = n >= 1000 ? { maximumFractionDigits: 0 } : n >= 1 ? { maximumFractionDigits: 2 } : { maximumFractionDigits: small }
   return '$' + n.toLocaleString('en-US', opts)
 }
 export const fmtNum = (n: number, digits = 2) =>

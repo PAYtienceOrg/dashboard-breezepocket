@@ -12,7 +12,15 @@ import VaultDetail from './pages/VaultDetail'
 import Dashboard from './pages/Dashboard'
 import Points from './pages/Points'
 import Leaderboard from './pages/Leaderboard'
+import { letterIcon } from './data/markets'
 
+// The backend can list an asset this app has no artwork for. Its icon then fails to load
+// wherever it is shown, and is swapped for the asset's initial. `error` does not bubble,
+// hence the capture phase.
+document.addEventListener('error', (e) => {
+  const img = e.target
+  if (img instanceof HTMLImageElement && /\/(icons|logos)\/[^/]+\.(svg|png)$/.test(img.src)) img.src = letterIcon(img.src)
+}, true)
 
 function Root() {
   return (

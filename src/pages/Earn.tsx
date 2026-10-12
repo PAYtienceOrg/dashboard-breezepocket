@@ -5,16 +5,16 @@ import Panel from '../components/Panel'
 import Dropdown from '../components/Dropdown'
 import { FilterIcon, Chevron } from '../components/Icons'
 import { useDesk } from '../components/DeskProvider'
-import { CALLS, PUTS, CHAINS, iconFor, marketHref, isPreStocks, assetName, categoryOf, CATEGORIES, type Category, type ChainId, type Market } from '../data/markets'
+import { CHAINS, iconFor, marketHref, marketOf, assetName, categoryOf, CATEGORIES, type Category, type ChainId, type Market } from '../data/markets'
 import { isBackend, priceSource, type Board, type Product } from '../lib/mm'
 
 type Tab = 'call' | 'put'
 type GroupBy = 'category' | 'chain'
-/** live: tradable on chain · quote: the desk streams a live price but cannot trade it · soon: neither. */
-type State = 'live' | 'quote' | 'soon'
+/** live: tradable on chain · quote: the desk streams a live price but cannot trade it. */
+type State = 'live' | 'quote'
 /** maxApr/minApr are the desk's live range, null when it is not quoting this market. */
-type Row = Market & { state: State; underlying: string | null; venue: string | null; maxApr: number | null; minApr: number | null }
-const STATE_ORDER: Record<State, number> = { live: 0, quote: 1, soon: 2 }
+type Row = Market & { state: State; underlying: string; venue: string; maxApr: number | null; minApr: number | null }
+const STATE_ORDER: Record<State, number> = { live: 0, quote: 1 }
 
 const TABS = [
   { id: 'put' as Tab, label: 'Start Accumulating Cheap Asset' },
@@ -78,13 +78,12 @@ export default function Earn() {
     return () => { cancelled = true; clearInterval(id) }
   }, [client, quotedKey])
 
+  // One row per asset the backend reports, in its order; there is no list of assets in this app.
   const rows = useMemo<Row[]>(() => {
-    let src: Row[] = (tab === 'call' ? CALLS : PUTS).map((m) => {
-      const desk = quoted.get(m.asset)
-      if (!desk) return { ...m, state: 'soon', underlying: null, venue: null, maxApr: null, minApr: null }
-      const range = aprRange(boards[`${m.asset}:${PRODUCT[tab]}`] ?? null)
+    let src: Row[] = [...quoted.values()].map((desk) => {
+      const range = aprRange(boards[`${desk.asset}:${PRODUCT[tab]}`] ?? null)
       return {
-        ...m,
+        ...marketOf(desk.asset, tab),
         state: desk.tradable ? 'live' : 'quote',
         underlying: desk.underlying,
         venue: desk.venue,
@@ -93,9 +92,9 @@ export default function Earn() {
       }
     })
     if (chain !== 'all') src = src.filter((m) => String(m.chainId) === chain)
-    if (cats.length) src = src.filter((m) => cats.includes(categoryOf(m.asset)))
+    if (cats.length) src = src.filter((m) => cats.includes(categoryOf(m.asset, m.venue)))
     const q = query.trim().toLowerCase()
-    if (q) src = src.filter((m) => m.asset.toLowerCase().includes(q) || assetName(m.asset).toLowerCase().includes(q))
+    if (q) src = src.filter((m) => m.asset.toLowerCase().includes(q) || assetName(m.asset, m.underlying).toLowerCase().includes(q))
     // Markets with a live price come first; Array.sort is stable, so each group keeps its order.
     return [...src].sort((a, b) => STATE_ORDER[a.state] - STATE_ORDER[b.state])
   }, [tab, chain, cats, query, boards, quoted])
@@ -103,7 +102,7 @@ export default function Earn() {
   // Each group keeps the order above.
   const groups = useMemo<{ key: string; label: string; icon?: string; rows: Row[] }[]>(() => {
     if (groupBy === 'category')
-      return CATEGORIES.map((c) => ({ key: c.id, label: c.label, rows: rows.filter((m) => categoryOf(m.asset) === c.id) })).filter((g) => g.rows.length)
+      return CATEGORIES.map((c) => ({ key: c.id, label: c.label, rows: rows.filter((m) => categoryOf(m.asset, m.venue) === c.id) })).filter((g) => g.rows.length)
     return (Object.keys(CHAINS).map(Number) as ChainId[])
       .map((id) => ({ key: String(id), label: CHAINS[id].name, icon: CHAINS[id].icon, rows: rows.filter((m) => m.chainId === id) }))
       .filter((g) => g.rows.length)
@@ -188,7 +187,11 @@ export default function Earn() {
             </div>
             <div className="tbl-h end" role="columnheader" />
 
-            {rows.length === 0 && <div className="tbl-empty">No assets match these filters.</div>}
+            {rows.length === 0 && (
+              <div className="tbl-empty">
+                {quoted.size > 0 ? 'No assets match these filters.' : status === 'offline' ? 'Market makers are offline, so there are no markets to show right now.' : status === 'connecting' ? 'Loading markets…' : 'No markets are being quoted right now.'}
+              </div>
+            )}
             {groups.flatMap((g) => [
               <div className="tbl-group" key={`group-${g.key}`}>
                 {g.icon && <img src={g.icon} alt="" />}
@@ -199,43 +202,35 @@ export default function Earn() {
               const chain = CHAINS[m.chainId]
               const label = tab === 'call' ? `Sell High Your ${m.asset}` : `Buy Low with ${m.collateral}`
               const btnIcon = tab === 'call' ? iconFor(m.asset) : iconFor(m.collateral)
-              const soon = m.state === 'soon'
-              // Live rows open the market from the asset cell too, like the button.
-              const AssetCell = (soon ? 'div' : Link) as React.ElementType
               // Only the desk's live quotes: a dash while it is not quoting this market.
               const apr = (v: number | null) => (v !== null && Number.isFinite(v) ? `${v.toFixed(2)}%` : '—')
               // The whole row opens the market; the links inside keep it reachable by keyboard.
               return (
                 <ul
-                  className={`tbl-row ${soon ? 'is-soon' : 'is-live'}`}
+                  className="tbl-row is-live"
                   key={`${m.asset}-${m.collateral}-${m.type}`}
-                  onClick={soon ? undefined : (e) => { if (!(e.target as HTMLElement).closest('a')) navigate(marketHref(m)) }}
+                  onClick={(e) => { if (!(e.target as HTMLElement).closest('a')) navigate(marketHref(m)) }}
                 >
                   <li className="tbl-c sticky">
-                    <AssetCell className="asset" {...(soon ? {} : { to: marketHref(m), 'aria-label': label })}>
+                    <Link className="asset" to={marketHref(m)} aria-label={label}>
                       <img src={iconFor(m.asset)} alt={`The icon for ${m.asset}`} />
                       <div className="asset-id">
                         <span className="asset-tick">
                           <b>{m.asset}</b>
                           {m.state === 'quote' && (
-                            <span className="tag-quote" title={`Live quote from ${priceSource(m.venue ?? '', m.underlying ?? m.asset)}. Quote only: not listed on the devnet program yet.`}>QUOTE</span>
+                            <span className="tag-quote" title={`Live quote from ${priceSource(m.venue, m.underlying)}. Quote only: not listed on the devnet program yet.`}>QUOTE</span>
                           )}
-                          {soon && <span className="tag-soon">SOON</span>}
-                          {isPreStocks(m.asset) && <span className="tag-rwa" title="Tokenized pre-IPO shares issued by PreStocks">PRE-IPO</span>}
+                          {m.venue === 'prestocks' && <span className="tag-rwa" title="Tokenized pre-IPO shares issued by PreStocks">PRE-IPO</span>}
                         </span>
-                        <small>{assetName(m.asset)}</small>
+                        <small>{assetName(m.asset, m.underlying)}</small>
                       </div>
-                    </AssetCell>
+                    </Link>
                   </li>
                   <li className="tbl-c"><div className="chain"><img src={chain.icon} alt={`The icon for ${chain.name}`} /><span>{chain.name}</span></div></li>
-                  <li className="tbl-c end"><span className={`apr ${soon ? 'apr-soon' : ''}`}>{apr(m.maxApr)}</span></li>
-                  <li className="tbl-c end"><span className={`apr ${soon ? 'apr-soon' : ''}`}>{apr(m.minApr)}</span></li>
+                  <li className="tbl-c end"><span className="apr">{apr(m.maxApr)}</span></li>
+                  <li className="tbl-c end"><span className="apr">{apr(m.minApr)}</span></li>
                   <li className="tbl-c end">
-                    {!soon ? (
-                      <Link className="btn-earn" to={marketHref(m)}><span className="ic"><img src={btnIcon} alt="" /></span>{label}</Link>
-                    ) : (
-                      <span className="btn-earn is-soon" title="Not yet listed on the devnet program"><span className="ic"><img src={btnIcon} alt="" /></span>Coming soon</span>
-                    )}
+                    <Link className="btn-earn" to={marketHref(m)}><span className="ic"><img src={btnIcon} alt="" /></span>{label}</Link>
                   </li>
                 </ul>
               )

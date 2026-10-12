@@ -10,7 +10,7 @@ import { useDesk } from '../components/DeskProvider'
 import { useWallet } from '../lib/wallet'
 import { useConnection } from '../lib/connection'
 import { useBalances } from '../hooks/useBalances'
-import { CHAINS, SOLANA, iconFor, assetName, assetsFor, findMarket, marketsFor, marketHref, fmtPrice, fmtNum, type OptionType } from '../data/markets'
+import { CHAINS, SOLANA, iconFor, assetName, marketOf, marketHref, fmtPrice, fmtNum, type OptionType } from '../data/markets'
 import {
   collateralOf, priceSource, productForType, productLabel, randomNonce,
   type Board, type BoardCell, type DeskExpiry, type FaucetInfo, type Product, type Quote,
@@ -30,13 +30,13 @@ const TYPES: { id: OptionType; label: string }[] = [
   { id: 'call', label: 'Sell High' },
 ]
 
-/** The terminal's strategy tabs for one asset; a strategy the asset has no market for cannot be picked. */
+/** The terminal's strategy tabs for one asset. */
 function useStrategyTabs(asset: string, type: OptionType): PanelTabs {
   const navigate = useNavigate()
   return {
-    items: TYPES.map((t) => ({ ...t, disabled: marketsFor(asset, t.id).length === 0 })),
+    items: TYPES,
     active: type,
-    onChange: (t) => navigate(marketHref(findMarket(asset, t as OptionType))),
+    onChange: (t) => navigate(marketHref(marketOf(asset, t as OptionType))),
   }
 }
 
@@ -102,15 +102,16 @@ function SpotPrice({ asset, spot }: { asset: string; spot: number | null }) {
 function HeaderChips({ asset, type }: { asset: string; type: OptionType }) {
   const navigate = useNavigate()
   const { health } = useDesk()
-  // Assets no market maker is quoting cannot be picked. Nothing is blocked until the desk has answered.
-  const quoted = health?.assets ? new Set(health.assets.map((a) => a.asset)) : null
+  // Every asset the backend reports, plus the one on screen until it has answered (or if it does not price it).
+  const quoted = health?.assets?.map((a) => a.asset) ?? []
+  const assets = quoted.includes(asset) ? quoted : [asset, ...quoted]
   return (
     <div className="ed-head-group">
       <Dropdown
         label="Asset"
         value={asset}
-        options={assetsFor(type).map((a) => ({ id: a, label: a, icon: iconFor(a), disabled: quoted !== null && !quoted.has(a) }))}
-        onChange={(a) => navigate(marketHref(findMarket(a, type)))}
+        options={assets.map((a) => ({ id: a, label: a, icon: iconFor(a) }))}
+        onChange={(a) => navigate(marketHref(marketOf(a, type)))}
       />
     </div>
   )
@@ -354,7 +355,7 @@ function LiveMarket({ asset, mint, decimals, type, expiryParam }: { asset: strin
                     label="Date"
                     value={String(expiryTs)}
                     options={expiries.map((e) => ({ id: String(e.expiry_ts), label: expiryLong(e.expiry_ts) }))}
-                    onChange={(id) => navigate(marketHref(findMarket(asset, type), id))}
+                    onChange={(id) => navigate(marketHref(marketOf(asset, type), id))}
                   />
                 </span>
               ) : '…'}
@@ -568,7 +569,7 @@ function QuoteOnlyMarket({ asset, type, expiryParam }: { asset: string; type: Op
           {loadErr && status === 'online' && <div className="notice warn">Market maker error: {loadErr}</div>}
           <div className="notice">
             <b>Quote only.</b> Live prices from {source}
-            {desk?.atm_vol ? (desk.venue === 'prestocks' ? `, flat synthetic vol ${(desk.atm_vol * 100).toFixed(0)}%` : `, ~30-day implied vol ${(desk.atm_vol * 100).toFixed(1)}%`) : ''}. {asset} is not listed on the devnet program yet, so a position
+            {desk?.atm_vol ? (desk.synthetic ? `, flat synthetic vol ${(desk.atm_vol * 100).toFixed(0)}%` : `, ~30-day implied vol ${(desk.atm_vol * 100).toFixed(1)}%`) : ''}. {asset} is not listed on the devnet program yet, so a position
             cannot be opened.
           </div>
 
@@ -581,7 +582,7 @@ function QuoteOnlyMarket({ asset, type, expiryParam }: { asset: string; type: Op
                     label="Date"
                     value={String(expiryTs)}
                     options={expiries.map((e) => ({ id: String(e.expiry_ts), label: expiryLong(e.expiry_ts) }))}
-                    onChange={(id) => navigate(marketHref(findMarket(asset, type), id))}
+                    onChange={(id) => navigate(marketHref(marketOf(asset, type), id))}
                   />
                 </span>
               ) : '…'}

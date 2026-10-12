@@ -39,6 +39,8 @@ export type DeskAsset = {
   asset: string
   underlying: string
   venue: string
+  /** True when no options market exists for it and the desk quotes a model chain at a flat vol. */
+  synthetic?: boolean
   tradable: boolean
   fresh: boolean
   spot: number | null
@@ -318,7 +320,9 @@ export const priceSource = (venue: string, underlying: string) =>
       ? `${underlying} listed options via Alpaca (indicative feed)`
       : venue === 'prestocks'
         ? `a synthetic chain on the ${underlying} PreStocks token price`
-        : `${underlying} (${venue})`
+        : venue === 'jupiter'
+          ? `a synthetic chain on the ${underlying} spot price from Jupiter`
+          : `${underlying} (${venue})`
 
 export const productLabel = (p: Product) => (p === 'sell_sol' ? 'Sell high' : 'Buy low')
 export const productForType = (t: 'call' | 'put'): Product => (t === 'call' ? 'sell_sol' : 'buy_sol')
